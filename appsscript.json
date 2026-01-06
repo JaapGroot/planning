@@ -1,0 +1,19 @@
+{
+  "timeZone": "Europe/Brussels",
+  "dependencies": {
+  },
+  "exceptionLogging": "STACKDRIVER",
+  "runtimeVersion": "V8",
+  "sheets": {
+    "macros": [{
+      "menuName": "syncAllTeams",
+      "functionName": "syncAllTeams"
+    }, {
+      "menuName": "showTeamDropdown",
+      "functionName": "showTeamDropdown"
+    }, {
+      "menuName": "updateTeamFile",
+      "functionName": "updateTeamFile"
+    }]
+  }
+}
