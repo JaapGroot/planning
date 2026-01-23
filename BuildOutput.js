@@ -1,4 +1,4 @@
-function buildDetailOutputMappedTeamOnly_(valuesAM, bgA, bgHtoK, bgM, bgL, bgWeeksMaster, fmt, fmtL, teamName, afmeldenMap) {
+function buildDetailOutputMappedTeamOnly_(valuesAM, bgA, bgHtoK, bgM, bgL, bgWeeksMaster, fmt, fmtL, teamName) {
   const teamNorm = normalize_(teamName);
 
   const rows = [];
@@ -7,7 +7,7 @@ function buildDetailOutputMappedTeamOnly_(valuesAM, bgA, bgHtoK, bgM, bgL, bgWee
   const blockSizes = [];
   const skipped = [];
 
-  // Formats for info range A..G (per output row)
+  // Formats for A..F
   const numFormats = [];
   const fontFamilies = [];
   const fontSizes = [];
@@ -32,20 +32,20 @@ function buildDetailOutputMappedTeamOnly_(valuesAM, bgA, bgHtoK, bgM, bgL, bgWee
     hadTeamMatch = false;
   }
 
-  function pushOut_(valuesAFG, bgsAFG, weekBg, fmtAFG) {
-    rows.push(buildTeamRowFull_(valuesAFG));
-    infoBgs.push(bgsAFG);
-    weekBgs.push(weekBg);
+  function pushOut_(valuesAF, bgsAF, weekBg, fmtAF) {
+    rows.push(buildTeamRowFull_(valuesAF)); // creates row length 65 with blank G
+    infoBgs.push(bgsAF);                    // A..F backgrounds
+    weekBgs.push(weekBg);                   // 58 week bgs
 
-    numFormats.push(fmtAFG.num);
-    fontFamilies.push(fmtAFG.family);
-    fontSizes.push(fmtAFG.size);
-    fontWeights.push(fmtAFG.weight);
-    fontStyles.push(fmtAFG.style);
-    fontColors.push(fmtAFG.color);
-    hAligns.push(fmtAFG.hAlign);
-    vAligns.push(fmtAFG.vAlign);
-    wraps.push(fmtAFG.wrap);
+    numFormats.push(fmtAF.num);
+    fontFamilies.push(fmtAF.family);
+    fontSizes.push(fmtAF.size);
+    fontWeights.push(fmtAF.weight);
+    fontStyles.push(fmtAF.style);
+    fontColors.push(fmtAF.color);
+    hAligns.push(fmtAF.hAlign);
+    vAligns.push(fmtAF.vAlign);
+    wraps.push(fmtAF.wrap);
   }
 
   function flushBlock_() {
@@ -62,18 +62,15 @@ function buildDetailOutputMappedTeamOnly_(valuesAM, bgA, bgHtoK, bgM, bgL, bgWee
       return;
     }
 
-    // Kopregel: week leeg/wit, afmelden uit bestaande map
-    const af = afmeldenMap[String(currentWn)];
-    header.valuesAFG[6] = (af === true || af === false) ? af : ""; // col G
-
+    // Header row: weeks blank/white
     pushOut_(
-      header.valuesAFG,
-      header.bgsAFG,
+      header.valuesAF,
+      header.bgsAF,
       new Array(bgWeeksMaster[0].length).fill("#ffffff"),
-      header.fmtAFG
+      header.fmtAF
     );
 
-    for (const d of details) pushOut_(d.valuesAFG, d.bgsAFG, d.weekBg, d.fmtAFG);
+    for (const d of details) pushOut_(d.valuesAF, d.bgsAF, d.weekBg, d.fmtAF);
 
     blockSizes.push({ headerRowCount: 1, detailCount: details.length });
     resetBlock_();
@@ -93,18 +90,15 @@ function buildDetailOutputMappedTeamOnly_(valuesAM, bgA, bgHtoK, bgM, bgL, bgWee
       currentWn = wn;
       include = typeof opdracht === "string" && normalize_(opdracht) === "ja";
 
-      // KOPREGEL: A..F but E = master L
+      // KOPREGEL: A..F, but E = master L
       const valuesAF = mapMasterToTeamValuesDetail_(rowVals);
-      valuesAF[4] = rowVals[CONFIG.MASTER_IDX_L];
-      const valuesAFG = [...valuesAF, ""];
+      valuesAF[4] = rowVals[CONFIG.MASTER_IDX_L]; // E = L (kopregel)
 
-      // backgrounds
       const bgsAF = mapMasterToTeamBgsDetail_(r, bgA, bgHtoK, bgM);
-      bgsAF[4] = bgL[r][0];
-      const bgsAFG = [...bgsAF, "#ffffff"];
+      bgsAF[4] = bgL[r][0]; // E bg from L
 
-      // formats
       const fmtAF = mapMasterToTeamFmtDetail_(r, fmt);
+      // override E formatting from L
       fmtAF.num[4] = fmtL.num[r][0];
       fmtAF.family[4] = fmtL.family[r][0];
       fmtAF.size[4] = fmtL.size[r][0];
@@ -115,9 +109,7 @@ function buildDetailOutputMappedTeamOnly_(valuesAM, bgA, bgHtoK, bgM, bgL, bgWee
       fmtAF.vAlign[4] = fmtL.vAlign[r][0];
       fmtAF.wrap[4] = fmtL.wrap[r][0];
 
-      const fmtAFG = extendFmtToG_(fmtAF);
-
-      header = { valuesAFG, bgsAFG, fmtAFG };
+      header = { valuesAF, bgsAF, fmtAF };
 
       if (!include) skipped.push([new Date(), teamName, wn, "Opdracht != Ja"]);
       continue;
@@ -130,19 +122,14 @@ function buildDetailOutputMappedTeamOnly_(valuesAM, bgA, bgHtoK, bgM, bgL, bgWee
 
     hadTeamMatch = true;
 
-    const vAF = mapMasterToTeamValuesDetail_(rowVals);
-    const vAFG = [...vAF, ""];
-
-    const bAF = mapMasterToTeamBgsDetail_(r, bgA, bgHtoK, bgM);
-    const bAFG = [...bAF, "#ffffff"];
-
-    const fAF = mapMasterToTeamFmtDetail_(r, fmt);
-    const fAFG = extendFmtToG_(fAF);
+    const valuesAF = mapMasterToTeamValuesDetail_(rowVals);
+    const bgsAF = mapMasterToTeamBgsDetail_(r, bgA, bgHtoK, bgM);
+    const fmtAF = mapMasterToTeamFmtDetail_(r, fmt);
 
     details.push({
-      valuesAFG: vAFG,
-      bgsAFG: bAFG,
-      fmtAFG: fAFG,
+      valuesAF,
+      bgsAF,
+      fmtAF,
       weekBg: bgWeeksMaster[r],
     });
   }
@@ -156,7 +143,7 @@ function buildDetailOutputMappedTeamOnly_(valuesAM, bgA, bgHtoK, bgM, bgL, bgWee
     blockSizes,
     skipped,
     textFormats: { numFormats, fontFamilies, fontSizes, fontWeights, fontStyles, fontColors, hAligns, vAligns, wraps },
-    headerRowIndexes: [], // set during write
+    headerRowIndexes: [],
   };
 }
 
@@ -182,23 +169,15 @@ function mapMasterToTeamFmtDetail_(r, fmt) {
   };
 }
 
-function extendFmtToG_(fmtAF) {
-  const i = 5; // base on F
-  return {
-    num: [...fmtAF.num, fmtAF.num[i]],
-    family: [...fmtAF.family, fmtAF.family[i]],
-    size: [...fmtAF.size, fmtAF.size[i]],
-    weight: [...fmtAF.weight, fmtAF.weight[i]],
-    style: [...fmtAF.style, fmtAF.style[i]],
-    color: [...fmtAF.color, fmtAF.color[i]],
-    hAlign: [...fmtAF.hAlign, fmtAF.hAlign[i]],
-    vAlign: [...fmtAF.vAlign, fmtAF.vAlign[i]],
-    wrap: [...fmtAF.wrap, fmtAF.wrap[i]],
-  };
-}
-
-function buildTeamRowFull_(valuesAFG) {
-  const row = valuesAFG.slice(0, CONFIG.INFO_COLS_END); // A..G
-  while (row.length < CONFIG.TOTAL_COLS) row.push("");
+/**
+ * Build a full row array length 65:
+ * A..F = valuesAF
+ * G    = "" (spacer)
+ * H..  = ""
+ */
+function buildTeamRowFull_(valuesAF) {
+  const row = new Array(CONFIG.TOTAL_COLS).fill("");
+  for (let i = 0; i < CONFIG.INFO_COLS_END; i++) row[i] = valuesAF[i] ?? "";
+  // row[6] (G) stays blank
   return row;
 }

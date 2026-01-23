@@ -13,7 +13,7 @@ function getTeamsFromPlanning_(planningSheet) {
 
     const isHeaderRow = wn && wn !== prevWn;
     if (wn) prevWn = wn;
-    if (isHeaderRow) continue;
+    if (isHeaderRow) continue; // skip header rows of each werknummer
 
     if (typeof team === "string") {
       const t = team.trim();

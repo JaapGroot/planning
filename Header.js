@@ -31,25 +31,10 @@ function refreshInfoHeadersEveryRun_(teamSheet, planningSheet) {
   targetAF.setHorizontalAlignments(headerFmt.hAlign);
   targetAF.setVerticalAlignments(headerFmt.vAlign);
   targetAF.setWrapStrategies(headerFmt.wrap);
-
-  // Column G header ("Afmelden") — style gelijk aan F
-  const gCell = teamSheet.getRange(CONFIG.INFO_HEADER_ROW, 7, 1, 1);
-  gCell.setValue("Afmelden");
-
-  const fCell = teamSheet.getRange(CONFIG.INFO_HEADER_ROW, 6, 1, 1);
-  gCell.setBackground(fCell.getBackground());
-  gCell.setFontColor(fCell.getFontColor());
-  gCell.setFontFamily(fCell.getFontFamily());
-  gCell.setFontSize(fCell.getFontSize());
-  gCell.setFontWeight(fCell.getFontWeight());
-  gCell.setFontStyle(fCell.getFontStyle());
-  gCell.setHorizontalAlignment(fCell.getHorizontalAlignment());
-  gCell.setVerticalAlignment(fCell.getVerticalAlignment());
-  gCell.setWrapStrategy(fCell.getWrapStrategy());
 }
 
 function refreshWeekHeaderStylingEveryRun_(teamSheet, planningSheet) {
-  const masterWeekCols = CONFIG.MASTER_TOTAL_COLS - CONFIG.MASTER_WEEK_START_COL + 1;
+  const masterWeekCols = CONFIG.MASTER_TOTAL_COLS - CONFIG.MASTER_WEEK_START_COL + 1; // 58
   const src = planningSheet.getRange(1, CONFIG.MASTER_WEEK_START_COL, 3, masterWeekCols);
   const dst = teamSheet.getRange(1, CONFIG.WEEK_START_COL, 3, masterWeekCols);
 

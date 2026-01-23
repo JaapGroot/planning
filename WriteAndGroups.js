@@ -18,13 +18,18 @@ function writeDetailToTeamSheetMapped_(file, sheet, detail) {
     return;
   }
 
+  // Ensure enough columns (template normally already has this)
+  if (sheet.getMaxColumns() < CONFIG.TOTAL_COLS) {
+    sheet.insertColumnsAfter(sheet.getMaxColumns(), CONFIG.TOTAL_COLS - sheet.getMaxColumns());
+  }
+
   const fullRange = sheet.getRange(CONFIG.DATA_START_ROW, 1, rows.length, CONFIG.TOTAL_COLS);
   fullRange.setValues(rows);
 
+  // Info A..F (no G)
   const infoRange = sheet.getRange(CONFIG.DATA_START_ROW, 1, rows.length, CONFIG.INFO_COLS_END);
   infoRange.setBackgrounds(infoBgs);
 
-  // apply formats to A..G
   infoRange.setNumberFormats(textFormats.numFormats);
   infoRange.setFontFamilies(textFormats.fontFamilies);
   infoRange.setFontSizes(textFormats.fontSizes);
@@ -35,8 +40,8 @@ function writeDetailToTeamSheetMapped_(file, sheet, detail) {
   infoRange.setVerticalAlignments(textFormats.vAligns);
   infoRange.setWrapStrategies(textFormats.wraps);
 
-  // weeks start at H
-  const weekCols = CONFIG.TOTAL_COLS - CONFIG.WEEK_START_COL + 1;
+  // Week columns H.. (58 cols)
+  const weekCols = CONFIG.TOTAL_COLS - CONFIG.WEEK_START_COL + 1; // 65-8+1=58
   const weekRange = sheet.getRange(CONFIG.DATA_START_ROW, CONFIG.WEEK_START_COL, rows.length, weekCols);
 
   const existing = weekRange.getBackgrounds();
@@ -44,6 +49,7 @@ function writeDetailToTeamSheetMapped_(file, sheet, detail) {
     for (let c = 0; c < weekCols; c++) {
       const master = weekBgs[r][c];
       const cur = existing[r][c];
+      // keep rule: only overwrite if master has color AND target is white or same color
       if (master !== "#ffffff" && (cur === "#ffffff" || cur === master)) {
         existing[r][c] = master;
       }

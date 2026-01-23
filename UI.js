@@ -1,37 +1,17 @@
 function onOpen() {
   SpreadsheetApp.getUi()
     .createMenu("Team Planning")
-    .addItem("Kolommen inklappen", "collapseTeamColumnsActiveSheet")
-    .addItem("Kolommen uitklappen", "expandTeamColumnsActiveSheet")
-    .addItem("Toggle kolommen", "toggleTeamColumnsActiveSheet")
-    .addSeparator()
     .addItem("Team bijwerken (dropdown)", "showTeamDropdown")
     .addItem("Alle teams (batch)", "syncAllTeamsBatched")
     .addToUi();
-}
 
-function collapseTeamColumnsActiveSheet() {
-  withScriptLock_(() => {
-    const sh = SpreadsheetApp.getActiveSheet();
-    sh.hideColumns(CONFIG.COLLAPSE_START_COL, CONFIG.COLLAPSE_NUM_COLS);
-  });
-}
-
-function expandTeamColumnsActiveSheet() {
-  withScriptLock_(() => {
-    const sh = SpreadsheetApp.getActiveSheet();
-    sh.showColumns(CONFIG.COLLAPSE_START_COL, CONFIG.COLLAPSE_NUM_COLS);
-  });
-}
-
-function toggleTeamColumnsActiveSheet() {
-  withScriptLock_(() => {
-    const sh = SpreadsheetApp.getActiveSheet();
-    const isHidden = sh.isColumnHiddenByUser(CONFIG.COLLAPSE_START_COL);
-    if (isHidden) sh.showColumns(CONFIG.COLLAPSE_START_COL, CONFIG.COLLAPSE_NUM_COLS);
-    else sh.hideColumns(CONFIG.COLLAPSE_START_COL, CONFIG.COLLAPSE_NUM_COLS);
-  });
-}
+  SpreadsheetApp.getUi()
+    .createMenu("Print")
+    .addItem("Print 1 werknummer (A3)", "uiPrintSingle")
+    .addItem("Batch: print alle locaties (PDF per locatie)", "uiPrintBatch")
+    .addItem("Batch hervatten", "uiResumeBatch")
+    .addToUi();
+  }
 
 function showTeamDropdown() {
   withScriptLock_(() => {
