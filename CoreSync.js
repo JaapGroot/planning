@@ -40,7 +40,6 @@ function updateTeamFileDetail_(ss, planningSheet, teamName, fileCache) {
 
   // Lightweight setup + headers refresh
   ensureTeamSheetSetupLight_(teamFile, teamSheet, teamName);
-  refreshAllHeaderStylingEveryRun_(teamSheet, planningSheet);
 
   // Build output
   const detail = buildDetailOutputMappedTeamOnly_(

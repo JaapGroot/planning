@@ -11,10 +11,10 @@ const CONFIG = {
   SPACER_COL_G: 7,                   // G stays empty & hidden
 
   TEAM_NAME_CELL: "A1",
-  INFO_HEADER_ROW: 3,                // team header row
-  MASTER_INFO_HEADER_ROW: 4,         // master header row
-  DATA_START_ROW: 4,
-  HEADER_ROWS: 3,
+  INFO_HEADER_ROW: 6,                // team header row
+  MASTER_INFO_HEADER_ROW: 6,         // master header row
+  DATA_START_ROW: 7,
+  HEADER_ROWS: 6,
   PLANNING_SHEET: "Planning",
   LOG_SHEET_NAME: "Log",
 
