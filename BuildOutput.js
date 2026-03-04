@@ -37,7 +37,7 @@ function buildDetailOutputMappedTeamOnly_(valuesAM, bgA, bgHtoK, bgM, bgL, bgWee
 
     if (headerDriveUrl) {
       const safeUrl = String(headerDriveUrl).replace(/"/g, '""');
-      full[CONFIG.TEAM_IDX_DRIVE_LINK_TARGET] = `=HYPERLINK("${safeUrl}";"${CONFIG.DRIVE_LINK_LABEL})"`; // 22 = kolom W
+      full[CONFIG.TEAM_IDX_DRIVE_LINK_TARGET] = `=HYPERLINK("${safeUrl}";"${CONFIG.DRIVE_LINK_LABEL}")`; // 22 = kolom W
     }
 
     rows.push(full);
