@@ -1,4 +1,4 @@
-function buildDetailOutputMappedTeamOnly_(valuesAM, bgA, bgHtoK, bgM, bgL, bgWeeksMaster, fmt, fmtL, teamName) {
+function buildDetailOutputMappedTeamOnly_(valuesAM, bgA, bgHtoK, bgM, bgL, bgWeeksMaster, fmt, fmtL, teamName, driveUrls) {
   const teamNorm = normalize_(teamName);
 
   const rows = [];
@@ -32,10 +32,17 @@ function buildDetailOutputMappedTeamOnly_(valuesAM, bgA, bgHtoK, bgM, bgL, bgWee
     hadTeamMatch = false;
   }
 
-  function pushOut_(valuesAF, bgsAF, weekBg, fmtAF) {
-    rows.push(buildTeamRowFull_(valuesAF)); // creates row length 65 with blank G
-    infoBgs.push(bgsAF);                    // A..F backgrounds
-    weekBgs.push(weekBg);                   // 58 week bgs
+  function pushOut_(valsAF, bgsAF, weekBgRow, fmtAF, headerDriveUrl) {
+    const full = buildTeamRowFull_(valsAF);
+
+    if (headerDriveUrl) {
+      const safeUrl = String(headerDriveUrl).replace(/"/g, '""');
+      full[CONFIG.TEAM_IDX_DRIVE_LINK_TARGET] = `=HYPERLINK("${safeUrl}";"${CONFIG.DRIVE_LINK_LABEL})"`; // 22 = kolom W
+    }
+
+    rows.push(full);
+    infoBgs.push(bgsAF);
+    weekBgs.push(weekBgRow);
 
     numFormats.push(fmtAF.num);
     fontFamilies.push(fmtAF.family);
@@ -62,12 +69,12 @@ function buildDetailOutputMappedTeamOnly_(valuesAM, bgA, bgHtoK, bgM, bgL, bgWee
       return;
     }
 
-    // Header row: weeks blank/white
     pushOut_(
       header.valuesAF,
       header.bgsAF,
       new Array(bgWeeksMaster[0].length).fill("#ffffff"),
-      header.fmtAF
+      header.fmtAF,
+      header.driveUrl
     );
 
     for (const d of details) pushOut_(d.valuesAF, d.bgsAF, d.weekBg, d.fmtAF);
@@ -109,7 +116,8 @@ function buildDetailOutputMappedTeamOnly_(valuesAM, bgA, bgHtoK, bgM, bgL, bgWee
       fmtAF.vAlign[4] = fmtL.vAlign[r][0];
       fmtAF.wrap[4] = fmtL.wrap[r][0];
 
-      header = { valuesAF, bgsAF, fmtAF };
+      const driveUrl = (driveUrls && driveUrls[r]) ? driveUrls[r] : "";
+      header = { valuesAF, bgsAF, fmtAF, driveUrl };
 
       if (!include) skipped.push([new Date(), teamName, wn, "Opdracht != Ja"]);
       continue;

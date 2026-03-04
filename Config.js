@@ -50,4 +50,8 @@ const CONFIG = {
   // Column collapse in team sheet (H..M)
   COLLAPSE_START_COL: 8,             // H
   COLLAPSE_NUM_COLS: 6,              // H..M
+
+  MASTER_IDX_DRIVE_LINK: 6, 
+  TEAM_IDX_DRIVE_LINK_TARGET: 21,
+  DRIVE_LINK_LABEL: "Locatie Drive (planning en tekeningen)",
 };

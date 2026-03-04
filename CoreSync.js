@@ -41,9 +41,22 @@ function updateTeamFileDetail_(ss, planningSheet, teamName, fileCache) {
   // Lightweight setup + headers refresh
   ensureTeamSheetSetupLight_(teamFile, teamSheet, teamName);
 
+  // kolom G (7) vanaf DATA_START_ROW, numRows regels
+  const rtG = planningSheet.getRange(CONFIG.DATA_START_ROW, 7, numRows, 1).getRichTextValues();
+
+  const driveUrls = rtG.map((row, i) => {
+    const rt = row[0];
+    const url = rt && rt.getLinkUrl ? rt.getLinkUrl() : null;
+    if (url) return url;
+
+    // fallback: als het toch platte tekst is
+    const v = valuesAM[i][CONFIG.MASTER_IDX_DRIVE_LINK]; // G binnen A..M is index 6
+    return (typeof v === "string") ? v.trim() : "";
+  });
+
   // Build output
   const detail = buildDetailOutputMappedTeamOnly_(
-    valuesAM, bgA, bgHtoK, bgM, bgL, bgWeeksMaster, fmt, fmtL, teamName
+    valuesAM, bgA, bgHtoK, bgM, bgL, bgWeeksMaster, fmt, fmtL, teamName, driveUrls
   );
 
   // Write
