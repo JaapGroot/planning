@@ -40,21 +40,6 @@ function ensureTeamSheetSetupLight_(file, sheet, teamName) {
     sheet.getRange(CONFIG.INFO_HEADER_ROW, 1, 1, CONFIG.INFO_COLS_END).createFilter();
   }
 
-  // Protect headers + info cols (optional; keep weeks editable)
-  protectSheetLight_(sheet);
 
   props.setProperty(key, "1");
-}
-
-function protectSheetLight_(sheet) {
-  // remove existing protections to avoid duplicates
-  sheet.getProtections(SpreadsheetApp.ProtectionType.RANGE).forEach(p => p.remove());
-
-  // protect header rows
-  sheet.getRange("1:3").protect().addEditor(Session.getEffectiveUser());
-
-  // protect info columns A..F only (weeks remain editable)
-  sheet.getRange(1, 1, sheet.getMaxRows(), CONFIG.INFO_COLS_END)
-    .protect()
-    .addEditor(Session.getEffectiveUser());
 }

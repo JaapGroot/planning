@@ -58,6 +58,7 @@ function writeDetailToTeamSheetMapped_(file, sheet, detail) {
   weekRange.setBackgrounds(existing);
 
   detail.headerRowIndexes = applyWerknummerGroupsExpandedAndReturnHeaderRows_(sheet, blockSizes);
+  protectDetailRows_(sheet, detail.headerRowIndexes, rows.length);
 
   props.setProperty(lastKey, String(rows.length));
 }
@@ -91,6 +92,48 @@ function clearRowGroups_(sheet, startRow, numRows) {
     while (depth > 0) {
       sheet.getRange(r, 1, 1, 1).shiftRowGroupDepth(-1);
       depth = sheet.getRowGroupDepth(r);
+    }
+  }
+}
+
+function protectDetailRows_(sheet, headerRows, totalRows) {
+
+  const startRow = CONFIG.DATA_START_ROW;
+  const endRow = startRow + totalRows - 1;
+
+  const colStart = CONFIG.TEAM_LOCK_START_COL;
+  const colEnd = CONFIG.TEAM_LOCK_END_COL;
+  const numCols = colEnd - colStart + 1;
+
+  const headerSet = new Set(headerRows);
+
+  // oude protections verwijderen
+  sheet.getProtections(SpreadsheetApp.ProtectionType.RANGE).forEach(p => {
+    const r = p.getRange();
+
+    if (
+      r.getColumn() === colStart &&
+      r.getLastColumn() === colEnd &&
+      r.getRow() >= startRow
+    ) {
+      p.remove();
+    }
+  });
+
+  // nieuwe protections maken
+  for (let r = startRow; r <= endRow; r++) {
+
+    if (!headerSet.has(r)) {
+
+      const range = sheet.getRange(r, colStart, 1, numCols);
+
+      const protection = range.protect();
+
+      protection.addEditor(Session.getEffectiveUser());
+
+      if (protection.canDomainEdit()) {
+        protection.setDomainEdit(false);
+      }
     }
   }
 }

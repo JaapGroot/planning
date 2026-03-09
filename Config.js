@@ -51,7 +51,14 @@ const CONFIG = {
   COLLAPSE_START_COL: 8,             // H
   COLLAPSE_NUM_COLS: 6,              // H..M
 
-  MASTER_IDX_DRIVE_LINK: 6, 
-  TEAM_IDX_DRIVE_LINK_TARGET: 21,
+  MASTER_IDX_DRIVE_LINK: 6,
+  TEAM_IDX_DRIVE_LINK_TARGET: 3,
   DRIVE_LINK_LABEL: "Locatie Drive (planning en tekeningen)",
+
+  TEAM_WORK_START_COL: 13, // M (1-based)
+  TEAM_WORK_END_COL: 64,   // BL (1-based)
+  AUTO_PROTECT_TAG: "AUTO_LOCK_DETAILS_M_BL",
+
+  TEAM_LOCK_START_COL: 1,  // A
+  TEAM_LOCK_END_COL: 64,   // BL
 };
