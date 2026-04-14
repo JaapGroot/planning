@@ -5,20 +5,20 @@ const FIRST_DATA_ROW = HEADER_ROWS + 1; // rij 7
 
 // Werknummer en header-info kolommen (1-based)
 const COL_WN = 1;            // A
-const COL_OPDR = 2;          // B
-const COL_PLAATS = 3;        // C
-const COL_ADRES = 4;         // D
-const COL_CONTACT = 5;       // E
+const COL_OPDR = 3;          // C
+const COL_PLAATS = 6;        // F
+const COL_ADRES = 8;         // H
+const COL_CONTACT = 4;       // D
 
 // "Echte werkregel inhoud" check: B..M (M=13)
 const LINE_FIRST_COL = 2;    // B
 const LINE_LAST_COL = 13;   // M
 
 // Header invulcellen
-const CELL_OPDR = "J1";
-const CELL_CONTACT = "J2";
-const CELL_PLAATS = "J3";
-const CELL_ADRES = "J4";
+const CELL_OPDR = "E1";
+const CELL_CONTACT = "E2";
+const CELL_PLAATS = "E3";
+const CELL_ADRES = "E4";
 
 // Batch throttling
 const SLEEP_BETWEEN_PDFS_MS = 2500;
