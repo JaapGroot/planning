@@ -1,22 +1,27 @@
 function sortPlanningByLocation() {
   sortWorkBlocksWithoutGroups_({
-    blockSortCol: 6,   // F
-    blockSortCol2: 8,  // H
-    detailSortCol: 3   // C
+    blockSortCol: 5,   // E = plaats op de headerregel
+    blockSortCol2: 7,  // G = adres op de headerregel
+    detailSortCol: 2   // B = werksoort op detailregels
   });
 }
 
 function sortPlanningByWorkNumber() {
   sortWorkBlocksWithoutGroups_({
     blockSortCol: 1,   // A = werknummer
-    blockSortCol2: 8, // H
-    detailSortCol: 3   // C
+    blockSortCol2: 7,  // G = adres als tweede sorteersleutel
+    detailSortCol: 2   // B = werksoort op detailregels
   });
 }
 
 function sortWorkBlocksWithoutGroups_(options) {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
-  const sh = SpreadsheetApp.getActiveSheet();
+  const sh = ss.getSheetByName(CONFIG.PLANNING_SHEET);
+
+  if (!sh) {
+    SpreadsheetApp.getUi().alert(`Tabblad "${CONFIG.PLANNING_SHEET}" niet gevonden.`);
+    return;
+  }
 
   const startRow = CONFIG.DATA_START_ROW;
   const lastRow = sh.getLastRow();
@@ -41,7 +46,7 @@ function sortWorkBlocksWithoutGroups_(options) {
   for (let i = 0; i < numRows; i++) {
     const absoluteRow = startRow + i;
     const rowValues = values[i];
-    const workNumber = safeCell_(rowValues, 1); // kolom A
+    const workNumber = safeCell_(rowValues, CONFIG.WORKORDER_COL);
 
     if (!workNumber) continue;
 
@@ -51,7 +56,7 @@ function sortWorkBlocksWithoutGroups_(options) {
       if (currentBlock) blocks.push(currentBlock);
 
       currentBlock = {
-        workNumber: workNumber,
+        workNumber,
         headerRow: absoluteRow,
         sortValue: safeCell_(rowValues, blockSortCol),
         sortValue2: blockSortCol2 ? safeCell_(rowValues, blockSortCol2) : "",
@@ -137,10 +142,6 @@ function sortWorkBlocksWithoutGroups_(options) {
     return;
   }
 
-  if (temp.getMaxRows() < totalOutputRows) {
-    temp.insertRowsAfter(temp.getMaxRows(), totalOutputRows - temp.getMaxRows());
-  }
-
   const neededRowsOnTarget = startRow + totalOutputRows - 1;
   if (sh.getMaxRows() < neededRowsOnTarget) {
     sh.insertRowsAfter(sh.getMaxRows(), neededRowsOnTarget - sh.getMaxRows());
@@ -164,10 +165,8 @@ function safeCell_(rowValues, colIndex1Based) {
 }
 
 function compareDetailValues_(a, b) {
-
   const aParts = splitDetailValue_(a);
   const bParts = splitDetailValue_(b);
-
   const orderMap = getDetailOrderMap_();
 
   const suffixCompare = aParts.suffix.localeCompare(
@@ -211,9 +210,7 @@ function normalizeText_(value) {
 }
 
 function splitDetailValue_(value) {
-
   const norm = normalizeText_(value);
-
   const match = norm.match(/^([^(]+)\s*(?:\((.*)\))?$/);
 
   return {
