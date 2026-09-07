@@ -5,6 +5,7 @@ const CONFIG = {
 
   DATA_START_ROW: 7,
   COLUMN_HEADER_ROW: 6,
+  LOCK_TIMEOUT_MS: 30000,
 
   // Masterkolommen
   WORKORDER_COL: 1, // A
@@ -32,6 +33,10 @@ const CONFIG = {
     'team',
     'werkzaamheden',
   ],
+
+  // Drive-link import. Via DocumentProperties kan dit zonder codewijziging
+  // overschreven worden met sleutel DRIVE_LINKS_FOLDER_ID.
+  DRIVE_LINKS_FOLDER_ID: '1LW6UwuoaBKafbS7CM9P7Z6DQkvgZAw8J',
 
   // Teamsheet output
   TEAM_OUTPUT_START_ROW: 7,
@@ -130,42 +135,49 @@ function promptAndSyncSingleTeam() {
  * =========================
  */
 function syncAllTeams() {
-  const ss = SpreadsheetApp.getActiveSpreadsheet();
-  const planningSheet = getPlanningSheetOrThrow_(ss);
+  return withPlanningDocumentLock_('teamsynchronisatie', () => {
+    const ss = SpreadsheetApp.getActiveSpreadsheet();
+    const planningSheet = getPlanningSheetOrThrow_(ss);
+    assertPlanningLayout2027_(planningSheet);
 
-  const snapshot = timeStep_('01 readPlanningSnapshot_', () => readPlanningSnapshot_(planningSheet));
-  const blocks = timeStep_('02 buildWorkOrderBlocks_', () => buildWorkOrderBlocks_(snapshot));
-  const teamIndex = timeStep_('03 indexBlocksByTeam_', () => indexBlocksByTeam_(blocks));
-  const cache = timeStep_('04 buildTeamFileCache_', () => buildTeamFileCache_(ss));
+    const snapshot = timeStep_('01 readPlanningSnapshot_', () => readPlanningSnapshot_(planningSheet));
+    const blocks = timeStep_('02 buildWorkOrderBlocks_', () => buildWorkOrderBlocks_(snapshot));
+    const teamIndex = timeStep_('03 indexBlocksByTeam_', () => indexBlocksByTeam_(blocks));
+    const cache = timeStep_('04 buildTeamFileCache_', () => buildTeamFileCache_(ss));
 
-  const teamNames = Object.keys(teamIndex).sort(localeCompareNl_);
-  Logger.log('Teams gevonden: %s', JSON.stringify(teamNames));
+    const teamNames = Object.keys(teamIndex).sort(localeCompareNl_);
+    Logger.log('Teams gevonden: %s', JSON.stringify(teamNames));
 
-  teamNames.forEach((teamName, idx) => {
-    timeStep_(`05 sync team ${idx + 1}/${teamNames.length}: ${teamName}`, () => {
-      syncTeamFromIndex_(ss, teamName, teamIndex[teamName], cache);
+    teamNames.forEach((teamName, idx) => {
+      timeStep_(`05 sync team ${idx + 1}/${teamNames.length}: ${teamName}`, () => {
+        syncTeamFromIndex_(ss, teamName, teamIndex[teamName], cache);
+      });
     });
   });
 }
 
 function syncSingleTeam(teamName) {
-  const ss = SpreadsheetApp.getActiveSpreadsheet();
-  const planningSheet = getPlanningSheetOrThrow_(ss);
-  const cleanTeamName = normalizeTeamNameKeepCase_(teamName);
-  if (!cleanTeamName) throw new Error('Ongeldige teamnaam.');
+  return withPlanningDocumentLock_('teamsynchronisatie', () => {
+    const ss = SpreadsheetApp.getActiveSpreadsheet();
+    const planningSheet = getPlanningSheetOrThrow_(ss);
+    assertPlanningLayout2027_(planningSheet);
 
-  const snapshot = timeStep_('01 readPlanningSnapshot_', () => readPlanningSnapshot_(planningSheet));
-  const blocks = timeStep_('02 buildWorkOrderBlocks_', () => buildWorkOrderBlocks_(snapshot));
-  const teamIndex = timeStep_('03 indexBlocksByTeam_', () => indexBlocksByTeam_(blocks));
-  const cache = timeStep_('04 buildTeamFileCache_', () => buildTeamFileCache_(ss));
+    const cleanTeamName = normalizeTeamNameKeepCase_(teamName);
+    if (!cleanTeamName) throw new Error('Ongeldige teamnaam.');
 
-  const matchedTeamName = findCanonicalTeamName_(cleanTeamName, Object.keys(teamIndex));
-  if (!matchedTeamName) {
-    throw new Error(`Team niet gevonden in planning: ${cleanTeamName}`);
-  }
+    const snapshot = timeStep_('01 readPlanningSnapshot_', () => readPlanningSnapshot_(planningSheet));
+    const blocks = timeStep_('02 buildWorkOrderBlocks_', () => buildWorkOrderBlocks_(snapshot));
+    const teamIndex = timeStep_('03 indexBlocksByTeam_', () => indexBlocksByTeam_(blocks));
+    const cache = timeStep_('04 buildTeamFileCache_', () => buildTeamFileCache_(ss));
 
-  timeStep_(`05 sync team ${matchedTeamName}`, () => {
-    syncTeamFromIndex_(ss, matchedTeamName, teamIndex[matchedTeamName], cache);
+    const matchedTeamName = findCanonicalTeamName_(cleanTeamName, Object.keys(teamIndex));
+    if (!matchedTeamName) {
+      throw new Error(`Team niet gevonden in planning: ${cleanTeamName}`);
+    }
+
+    timeStep_(`05 sync team ${matchedTeamName}`, () => {
+      syncTeamFromIndex_(ss, matchedTeamName, teamIndex[matchedTeamName], cache);
+    });
   });
 }
 
@@ -185,6 +197,7 @@ function debugSingleTeamTiming() {
 function debugListTeams() {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
   const planningSheet = getPlanningSheetOrThrow_(ss);
+  assertPlanningLayout2027_(planningSheet);
   const snapshot = readPlanningSnapshot_(planningSheet);
   const blocks = buildWorkOrderBlocks_(snapshot);
   const index = indexBlocksByTeam_(blocks);
@@ -286,6 +299,13 @@ function assertPlanningLayout2027_(planningSheet) {
       'Planning-layout wijkt af van de 2027-indeling. ' + mismatches.join('; ')
     );
   }
+}
+
+function planningColumnByHeader_(headerName) {
+  const wanted = normalizeHeaderText_(headerName);
+  const index = CONFIG.EXPECTED_2027_HEADERS.indexOf(wanted);
+  if (index < 0) throw new Error(`Onbekende planningkolom: ${headerName}`);
+  return index + 1;
 }
 
 function columnLetter_(col) {
@@ -584,6 +604,8 @@ function createTeamSheet_(sheet, teamName, teamBlocks) {
 function updateTeamSheetAppendMissing_(sheet, teamName, teamBlocks) {
   const existingWorkOrders = timeStep_(`readExistingWorkOrders_ ${teamName}`, () => readExistingWorkOrders_(sheet));
 
+  // Bewust append-only: bestaande werknummerblokken blijven als historie staan.
+  // Alleen werknummerblokken die nog niet in dit teamblad voorkomen worden toegevoegd.
   const missingBlocks = (teamBlocks || []).filter(block => !existingWorkOrders.has(block.workOrder));
   Logger.log('%s -> ontbrekende blokken: %s', teamName, missingBlocks.length);
 
@@ -721,6 +743,23 @@ function ensureSheetHasEnoughSize_(sheet, requiredRows, requiredCols) {
  * Helpers
  * =========================
  */
+function withPlanningDocumentLock_(label, fn, timeoutMs) {
+  const lock = LockService.getDocumentLock();
+  const waitMs = timeoutMs == null ? CONFIG.LOCK_TIMEOUT_MS : timeoutMs;
+
+  if (!lock.tryLock(waitMs)) {
+    throw new Error(
+      `${label || 'Deze actie'} kan niet starten omdat een andere planning-actie nog bezig is. Probeer het zo opnieuw.`
+    );
+  }
+
+  try {
+    return fn();
+  } finally {
+    lock.releaseLock();
+  }
+}
+
 function timeStep_(label, fn) {
   const start = Date.now();
   const result = fn();
