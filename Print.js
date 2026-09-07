@@ -1,18 +1,22 @@
 /************ CONFIG ************/
 const SHEET_NAME = "Planning";
-const HEADER_ROWS = 6;                 // rijen 1..6
-const FIRST_DATA_ROW = HEADER_ROWS + 1; // rij 7
+const HEADER_ROWS = 6;
+const FIRST_DATA_ROW = HEADER_ROWS + 1;
 
-// Werknummer en header-info kolommen (1-based)
-const COL_WN = 1;            // A
-const COL_OPDR = 3;          // C
-const COL_PLAATS = 6;        // F
-const COL_ADRES = 8;         // H
-const COL_CONTACT = 4;       // D
+// 2027 combi-layout (1-based)
+// Headerregel: A werknummer, B opdrachtgever, C contactpersoon,
+// D Drive-link, E plaats, F opdracht Ja/Nee, G adres.
+// Detailregel: A werknummer, B werksoort, C frequentie,
+// D aantal, E eenheid, F team, G werkzaamheden.
+const COL_WN = 1;
+const COL_OPDR = 2;
+const COL_CONTACT = 3;
+const COL_PLAATS = 5;
+const COL_ADRES = 7;
 
-// "Echte werkregel inhoud" check: B..M (M=13)
-const LINE_FIRST_COL = 2;    // B
-const LINE_LAST_COL = 13;   // M
+// Een echte detailregel heeft inhoud in één van B..G.
+const LINE_FIRST_COL = 2;
+const LINE_LAST_COL = 7;
 
 // Header invulcellen
 const CELL_OPDR = "E1";
@@ -23,15 +27,15 @@ const CELL_ADRES = "E4";
 // Batch throttling
 const SLEEP_BETWEEN_PDFS_MS = 2500;
 const EXPORT_MAX_ATTEMPTS = 8;
-
-const BATCH_CHUNK_SIZE = 20;              // 10–15 is meestal veilig
+const BATCH_CHUNK_SIZE = 20;
 const BATCH_STATE_KEY = "PRINT_BATCH_STATE_V1";
 
 /************ UI ************/
 function uiPrintSingle() {
   const ui = SpreadsheetApp.getUi();
-  const resp = ui.prompt("Werknummer printen", "Vul werknummer in (bijv. G2600001-1)", ui.ButtonSet.OK_CANCEL);
+  const resp = ui.prompt("Werknummer printen", "Vul werknummer in (bijv. G2700001-1)", ui.ButtonSet.OK_CANCEL);
   if (resp.getSelectedButton() !== ui.Button.OK) return;
+
   const wn = (resp.getResponseText() || "").trim();
   if (!wn) return ui.alert("Geen werknummer ingevuld.");
 
@@ -41,18 +45,17 @@ function uiPrintSingle() {
 
 function uiPrintBatch() {
   const ui = SpreadsheetApp.getUi();
-  const resp = ui.prompt("Batch printen", "Vul BASIS werknummer in (bijv. G2600001)", ui.ButtonSet.OK_CANCEL);
+  const resp = ui.prompt("Batch printen", "Vul BASIS werknummer in (bijv. G2700001)", ui.ButtonSet.OK_CANCEL);
   if (resp.getSelectedButton() !== ui.Button.OK) return;
 
   const base = ((resp.getResponseText() || "").trim().split("-")[0] || "").trim();
   if (!base) return ui.alert("Geen basis werknummer ingevuld.");
 
-  // reset + start nieuwe batch
   const props = PropertiesService.getDocumentProperties();
   props.setProperty(BATCH_STATE_KEY, JSON.stringify({
     base,
     index: 0,
-    links: []   // we bewaren links zodat je na meerdere runs 1 lijst krijgt
+    links: []
   }));
 
   runBatchChunk_();
@@ -68,63 +71,53 @@ function printOne_(werknummer) {
   const lastCol = src.getLastColumn();
   if (lastRow < FIRST_DATA_ROW) throw new Error("Geen data onder de header.");
 
-  // Lees data als DISPLAY (om "" goed als leeg te zien)
   const num = lastRow - HEADER_ROWS;
   const data = src.getRange(FIRST_DATA_ROW, 1, num, lastCol).getDisplayValues();
 
-  // 1) Vind start/eind (eind = laatste rij met echte inhoud in B..M)
   const block = findBlock_(data, werknummer);
   if (!block) throw new Error(`Werknummer niet gevonden: ${werknummer}`);
 
   const { startIdx, endIdx } = block;
-
-  // Header info uit eerste regel
   const firstRow = data[startIdx];
+
   const opdrachtgever = firstRow[COL_OPDR - 1] || "";
   const contactpersoon = firstRow[COL_CONTACT - 1] || "";
   const plaats = firstRow[COL_PLAATS - 1] || "";
   const adres = firstRow[COL_ADRES - 1] || "";
 
-  // 2) Eerste regel niet printen => printStartIdx
-  const printStartIdx = Math.min(startIdx + 1, endIdx);
+  // De kopregel zelf wordt niet als werkregel geprint.
+  const printStartIdx = startIdx + 1;
   const keptCount = endIdx - printStartIdx + 1;
-  if (keptCount <= 0) throw new Error(`Niets om te printen voor ${werknummer} (alleen 1 regel).`);
+  if (keptCount <= 0) throw new Error(`Niets om te printen voor ${werknummer} (geen werkregels).`);
 
-  // 3) Absolute rijen in sheet
   const startAbsRow = FIRST_DATA_ROW + printStartIdx;
   const endAbsRow = FIRST_DATA_ROW + endIdx;
 
-  // 4) Temp tab in hetzelfde spreadsheet (formules blijven werken)
   const tmpName = `TMP_${werknummer}_${Date.now()}`;
   const tmp = src.copyTo(ss).setName(tmpName);
 
   try {
-    // Header invullen
     tmp.getRange(CELL_OPDR).setValue(opdrachtgever);
     tmp.getRange(CELL_CONTACT).setValue(contactpersoon);
     tmp.getRange(CELL_PLAATS).setValue(plaats);
     tmp.getRange(CELL_ADRES).setValue(adres);
 
-
-    // Rijen knippen (exact op start/eind)
     const tmpLastRow = tmp.getLastRow();
-    if (endAbsRow < tmpLastRow) tmp.deleteRows(endAbsRow + 1, tmpLastRow - endAbsRow);
-    if (startAbsRow > FIRST_DATA_ROW) tmp.deleteRows(FIRST_DATA_ROW, startAbsRow - FIRST_DATA_ROW);
+    if (endAbsRow < tmpLastRow) {
+      tmp.deleteRows(endAbsRow + 1, tmpLastRow - endAbsRow);
+    }
+    if (startAbsRow > FIRST_DATA_ROW) {
+      tmp.deleteRows(FIRST_DATA_ROW, startAbsRow - FIRST_DATA_ROW);
+    }
 
-    // Lege werkregels binnen het blok weghalen (B..M leeg)
     removeBlankLines_(tmp);
 
-    // Laatste kolom bepalen (laatste zichtbare kolom met inhoud in rijen 1..6)
     const lastColToPrint = lastVisibleContentCol_(tmp, HEADER_ROWS);
-
-    // ✅ Belangrijk: exporthoogte NIET op getLastRow, maar puur op start/eind logica
-    // Na removeBlankLines_ kan het aantal data-rijen lager worden,
-    // daarom gebruiken we de werkelijke data-hoogte:
     const dataRowsNow = tmp.getLastRow() - HEADER_ROWS;
+    if (dataRowsNow <= 0) throw new Error(`Niets om te printen voor ${werknummer}.`);
+
     const lastRowToPrint = HEADER_ROWS + dataRowsNow;
-
-    return exportPdfRetry_(ss, tmp, `${werknummer}`, lastRowToPrint, lastColToPrint);
-
+    return exportPdfRetry_(ss, tmp, werknummer, lastRowToPrint, lastColToPrint);
   } finally {
     ss.deleteSheet(tmp);
   }
@@ -151,21 +144,23 @@ function findBlock_(data, werknummer) {
   let endIdx = -1;
 
   for (let i = 0; i < data.length; i++) {
-    if (clean_(data[i][wnCol]) === werknummer) {
-      if (startIdx === -1) startIdx = i;
-      if (hasLineContent_(data[i])) endIdx = i;
+    if (clean_(data[i][wnCol]) !== werknummer) continue;
+
+    if (startIdx === -1) {
+      startIdx = i;
+      continue; // eerste match is de headerregel
     }
+
+    if (hasLineContent_(data[i])) endIdx = i;
   }
+
   if (startIdx === -1) return null;
-  if (endIdx === -1) {
-    for (let i = data.length - 1; i >= startIdx; i--) {
-      if (clean_(data[i][wnCol]) === werknummer) { endIdx = i; break; }
-    }
-  }
+  if (endIdx === -1) endIdx = startIdx;
+
   return { startIdx, endIdx };
 }
 
-/************ Remove blank work lines (B..M empty) ************/
+/************ Remove blank work lines (B..G empty) ************/
 function removeBlankLines_(sheet) {
   const lastRow = sheet.getLastRow();
   const lastCol = sheet.getLastColumn();
@@ -226,7 +221,10 @@ function exportPdfRetry_(ss, sheet, fileName, lastRowToPrint, lastColToPrint) {
     right_margin: "0.50"
   };
 
-  const query = Object.keys(params).map(k => `${encodeURIComponent(k)}=${encodeURIComponent(params[k])}`).join("&");
+  const query = Object.keys(params)
+    .map(k => `${encodeURIComponent(k)}=${encodeURIComponent(params[k])}`)
+    .join("&");
+
   const url = `https://docs.google.com/spreadsheets/d/${ssId}/export?gid=${gid}&${query}`;
 
   for (let attempt = 1; attempt <= EXPORT_MAX_ATTEMPTS; attempt++) {
@@ -243,7 +241,7 @@ function exportPdfRetry_(ss, sheet, fileName, lastRowToPrint, lastColToPrint) {
     const bytes = blob.getBytes();
 
     const looksPdf = bytes.length >= 4 &&
-      bytes[0] === 0x25 && bytes[1] === 0x50 && bytes[2] === 0x44 && bytes[3] === 0x46; // %PDF
+      bytes[0] === 0x25 && bytes[1] === 0x50 && bytes[2] === 0x44 && bytes[3] === 0x46;
 
     if (code === 200 && (ct.includes("pdf") || looksPdf)) {
       const folder = getPlanningenFolder_();
@@ -295,10 +293,14 @@ function escapeRegex_(s) {
 
 /************ Links dialog ************/
 function showLinks_(items, title) {
-  const list = items.map(x => `<li><a href="${x.url}" target="_blank">${escapeHtml_(x.label)}</a></li>`).join("");
+  const list = items
+    .map(x => `<li><a href="${x.url}" target="_blank">${escapeHtml_(x.label)}</a></li>`)
+    .join("");
+
   const html = HtmlService.createHtmlOutput(`<p><b>Klaar ✅</b></p><ol>${list}</ol>`)
     .setWidth(420)
     .setHeight(Math.min(600, 140 + items.length * 22));
+
   SpreadsheetApp.getUi().showModelessDialog(html, title);
 }
 
@@ -337,30 +339,23 @@ function runBatchChunk_() {
     return ui.alert(`Geen locaties gevonden voor ${base}.`);
   }
 
-  // chunk bepalen
   const end = Math.min(index + BATCH_CHUNK_SIZE, variants.length);
   const slice = variants.slice(index, end);
 
-  // uitvoer
   for (const wn of slice) {
     const file = printOne_(wn);
     links.push({ label: wn, url: file.getUrl() });
-
-    // throttle tegen rate limits
     Utilities.sleep(SLEEP_BETWEEN_PDFS_MS);
   }
 
-  // state opslaan
   index = end;
   props.setProperty(BATCH_STATE_KEY, JSON.stringify({ base, index, links }));
 
   if (index >= variants.length) {
-    // klaar
     props.deleteProperty(BATCH_STATE_KEY);
     showLinks_(links, `PDF-links (${base})`);
     ui.alert(`Batch klaar ✅ (${variants.length} locaties).`);
   } else {
-    // nog niet klaar: geef voortgang + instructie
     ui.alert(
       `Batch gedeeltelijk klaar: ${index}/${variants.length}.\n` +
       `Klik opnieuw op 'Print → Batch hervatten' om door te gaan.`
@@ -371,22 +366,17 @@ function runBatchChunk_() {
 function getPlanningenFolder_() {
   const ss = SpreadsheetApp.getActive();
   const ssFile = DriveApp.getFileById(ss.getId());
-
-  // Het spreadsheet kan in meerdere mappen staan; we pakken de "eerste" parent.
   const parents = ssFile.getParents();
+
   if (!parents.hasNext()) {
-    // Als er geen parent is (zeldzaam), zet hem in root of maak daar de map.
     const root = DriveApp.getRootFolder();
     const it = root.getFoldersByName("planningen");
     return it.hasNext() ? it.next() : root.createFolder("planningen");
   }
 
   const parentFolder = parents.next();
-
-  // Zoek submap "planningen" in dezelfde map als het spreadsheet
   const it = parentFolder.getFoldersByName("planningen");
   if (it.hasNext()) return it.next();
 
-  // Bestaat nog niet? Dan maken (mag je ook weglaten als je liever een error wilt)
   return parentFolder.createFolder("planningen");
 }
