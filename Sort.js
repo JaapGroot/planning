@@ -76,6 +76,10 @@ function sortWorkBlocksWithoutGroups_(options) {
       return;
     }
 
+    // Groepen horen bij de huidige rijposities. Haal ze daarom eerst volledig
+    // van het databereik af voordat we de blokken gaan verplaatsen.
+    clearPlanningRowGroups_(sh, startRow, numRows);
+
     const orderMap = getDetailOrderMap_();
     for (const block of blocks) {
       if (block.detailRows.length < 2) continue;
@@ -136,7 +140,42 @@ function sortWorkBlocksWithoutGroups_(options) {
       .copyTo(sh.getRange(startRow, 1, totalOutputRows, lastCol), { contentsOnly: false });
 
     temp.clear();
+
+    // Bouw de locatie-/werknummergroepen opnieuw op op basis van de nieuwe
+    // volgorde: kopregel blijft zichtbaar, detailregels worden groepdiepte 1.
+    applyPlanningRowGroups_(sh, blocks, startRow);
   });
+}
+
+function clearPlanningRowGroups_(sheet, startRow, numRows) {
+  if (numRows <= 0) return;
+
+  const range = sheet.getRange(startRow, 1, numRows, 1);
+
+  // Google Sheets ondersteunt maximaal 8 niveaus rijgroepering. Door het hele
+  // databereik acht keer één niveau terug te zetten zijn ook eventuele oude
+  // of geneste groepen volledig verwijderd zonder rij-voor-rij API-calls.
+  for (let depth = 0; depth < 8; depth++) {
+    range.shiftRowGroupDepth(-1);
+  }
+}
+
+function applyPlanningRowGroups_(sheet, blocks, startRow) {
+  let cursor = startRow;
+
+  for (const block of blocks) {
+    const detailCount = block.detailRows.length;
+
+    if (detailCount > 0) {
+      const detailStart = cursor + 1;
+      sheet.getRange(detailStart, 1, detailCount, 1).shiftRowGroupDepth(1);
+
+      const group = sheet.getRowGroup(detailStart, 1);
+      if (group) group.expand();
+    }
+
+    cursor += 1 + detailCount;
+  }
 }
 
 function ensureSortTempSize_(sheet, requiredRows, requiredCols) {
