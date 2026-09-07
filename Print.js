@@ -31,14 +31,16 @@ function uiPrintBatch() {
   const base = clean_((resp.getResponseText() || '').split('-')[0]);
   if (!base) return ui.alert('Geen basis werknummer ingevuld.');
 
-  const props = PropertiesService.getDocumentProperties();
-  props.setProperty(PRINT_CONFIG.BATCH_STATE_KEY, JSON.stringify({
-    base,
-    index: 0,
-    links: []
-  }));
+  return withPlanningDocumentLock_('PDF-batch', () => {
+    const props = PropertiesService.getDocumentProperties();
+    props.setProperty(PRINT_CONFIG.BATCH_STATE_KEY, JSON.stringify({
+      base,
+      index: 0,
+      links: []
+    }));
 
-  runBatchChunk_();
+    runBatchChunkUnlocked_();
+  });
 }
 
 function uiResumeBatch() {
@@ -77,7 +79,6 @@ function printOneUnlocked_(werknummer) {
   const plaats = firstRow[cols.plaats - 1] || '';
   const adres = firstRow[cols.adres - 1] || '';
 
-  // De kopregel zelf wordt niet als werkregel geprint.
   const printStartIdx = startIdx + 1;
   if (endIdx < printStartIdx) {
     throw new Error(`Niets om te printen voor ${werknummer} (geen werkregels).`);
@@ -163,7 +164,7 @@ function findPrintBlock_(data, werknummer, cols) {
 
     if (startIdx === -1) {
       startIdx = i;
-      continue; // eerste match is de headerregel
+      continue;
     }
 
     if (hasPrintLineContent_(data[i], cols)) endIdx = i;
@@ -192,8 +193,6 @@ function removeBlankPrintLines_(sheet, cols) {
     }
   }
 
-  // Verwijder aaneengesloten lege ranges van onder naar boven. Dat is sneller
-  // dan elke lege rij afzonderlijk verwijderen.
   deleteRowRunsBottomUp_(sheet, rowsToDelete);
 }
 
@@ -351,6 +350,10 @@ function escapeHtml_(s) {
 }
 
 function runBatchChunk_() {
+  return withPlanningDocumentLock_('PDF-batch', () => runBatchChunkUnlocked_());
+}
+
+function runBatchChunkUnlocked_() {
   const ui = SpreadsheetApp.getUi();
   const props = PropertiesService.getDocumentProperties();
 
@@ -376,7 +379,7 @@ function runBatchChunk_() {
   const slice = variants.slice(index, end);
 
   for (const wn of slice) {
-    const file = printOne_(wn);
+    const file = printOneUnlocked_(wn);
     links.push({ label: wn, url: file.getUrl() });
     Utilities.sleep(PRINT_CONFIG.SLEEP_BETWEEN_PDFS_MS);
   }
