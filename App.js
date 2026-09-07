@@ -4,7 +4,7 @@ const CONFIG = {
   TEAM_FILE_PREFIX: 'Planning - ',
 
   DATA_START_ROW: 7,
-  HEADER_SCAN_ROWS: 6,
+  COLUMN_HEADER_ROW: 6,
 
   // Masterkolommen
   WORKORDER_COL: 1, // A
@@ -20,7 +20,18 @@ const CONFIG = {
     'opdracht / team',
     'opdracht/team',
   ],
-  TEAM_OR_OPDRACHT_FALLBACK_COL: 11, // K in de 2027-indeling
+  TEAM_OR_OPDRACHT_FALLBACK_COL: 6, // F in de 2027-indeling
+
+  // Verwachte vaste A..G-indeling voor functies die semantiek per kolom gebruiken.
+  EXPECTED_2027_HEADERS: [
+    'werknummer',
+    'werksoort',
+    'frequentie',
+    'aantal',
+    'eenheid',
+    'team',
+    'werkzaamheden',
+  ],
 
   // Teamsheet output
   TEAM_OUTPUT_START_ROW: 7,
@@ -221,17 +232,12 @@ function readPlanningSnapshot_(planningSheet) {
 }
 
 function resolvePlanningLayout_(planningSheet, lastCol) {
-  const maxHeaderRows = Math.min(
-    CONFIG.HEADER_SCAN_ROWS,
-    Math.max(0, CONFIG.DATA_START_ROW - 1),
-    planningSheet.getMaxRows()
-  );
-
   let teamOrOpdrachtCol = 0;
+  const headerRow = Math.min(CONFIG.COLUMN_HEADER_ROW, planningSheet.getMaxRows());
 
-  if (maxHeaderRows > 0 && lastCol > 0) {
+  if (headerRow > 0 && lastCol > 0) {
     const headerValues = planningSheet
-      .getRange(1, 1, maxHeaderRows, lastCol)
+      .getRange(headerRow, 1, 1, lastCol)
       .getDisplayValues();
 
     teamOrOpdrachtCol = findHeaderColumn_(
@@ -252,6 +258,45 @@ function resolvePlanningLayout_(planningSheet, lastCol) {
     workOrderCol: CONFIG.WORKORDER_COL,
     teamOrOpdrachtCol,
   };
+}
+
+function assertPlanningLayout2027_(planningSheet) {
+  const expected = CONFIG.EXPECTED_2027_HEADERS;
+  const lastCol = planningSheet.getLastColumn();
+  if (lastCol < expected.length) {
+    throw new Error(
+      `Planning-layout ongeldig: minimaal ${expected.length} kolommen verwacht, maar ${lastCol} gevonden.`
+    );
+  }
+
+  const actual = planningSheet
+    .getRange(CONFIG.COLUMN_HEADER_ROW, 1, 1, expected.length)
+    .getDisplayValues()[0]
+    .map(normalizeHeaderText_);
+
+  const mismatches = [];
+  for (let i = 0; i < expected.length; i++) {
+    if (actual[i] !== expected[i]) {
+      mismatches.push(`${columnLetter_(i + 1)}: verwacht "${expected[i]}", gevonden "${actual[i] || '-'}"`);
+    }
+  }
+
+  if (mismatches.length) {
+    throw new Error(
+      'Planning-layout wijkt af van de 2027-indeling. ' + mismatches.join('; ')
+    );
+  }
+}
+
+function columnLetter_(col) {
+  let n = col;
+  let result = '';
+  while (n > 0) {
+    n--;
+    result = String.fromCharCode(65 + (n % 26)) + result;
+    n = Math.floor(n / 26);
+  }
+  return result;
 }
 
 function findHeaderColumn_(headerValues, aliases) {
