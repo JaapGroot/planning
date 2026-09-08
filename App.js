@@ -4,17 +4,17 @@ const CONFIG = {
   TEAM_FILE_PREFIX: 'Planning - ',
 
   DATA_START_ROW: 7,
-  MASTER_TOTAL_COLS: 65,
+  MASTER_TOTAL_COLS: 64,
 
   // Masterkolommen
   WORKORDER_COL: 1,     // A
-  OPDRACHT_COL: 2,      // B (headerregel: Ja/Nee)
-  TEAM_COL: 7,         // L
+  OPDRACHT_COL: 6,      // F (headerregel: Ja/Nee)
+  TEAM_COL: 6,          // F
 
   // Teamsheet output
   TEAM_OUTPUT_START_ROW: 7,
   TEAM_OUTPUT_START_COL: 1,
-  TEAM_OUTPUT_MASTER_COLS: Array.from({ length: 65 }, (_, i) => i + 1),
+  TEAM_OUTPUT_MASTER_COLS: Array.from({ length: 64 }, (_, i) => i + 1),
 
   // Visuele setup teamsheet
   COPY_BACKGROUNDS: true,
@@ -31,9 +31,9 @@ const CONFIG = {
   TEAM_DEBUG: 'Danny Waltmann',
 
   DATA_START_ROW: 7,
-  BLOCK_SORT_COL: 6,      // F
-  BLOCK_SORT_COL_2: 8,    // H
-  DETAIL_SORT_COL: 3,     // C
+  BLOCK_SORT_COL: 5,      // E
+  BLOCK_SORT_COL_2: 7,    // G
+  DETAIL_SORT_COL: 2,     // B
   TEMP_SHEET_NAME: "_tmp_sort_blocks_",
 
   DETAIL_ORDER: [
