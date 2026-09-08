@@ -5,14 +5,14 @@ const FIRST_DATA_ROW = HEADER_ROWS + 1; // rij 7
 
 // Werknummer en header-info kolommen (1-based)
 const COL_WN = 1;            // A
-const COL_OPDR = 3;          // C
-const COL_PLAATS = 6;        // F
-const COL_ADRES = 8;         // H
-const COL_CONTACT = 4;       // D
+const COL_OPDR = 2;          // B
+const COL_PLAATS = 5;        // E
+const COL_ADRES = 7;         // G
+const COL_CONTACT = 3;       // C
 
-// "Echte werkregel inhoud" check: B..M (M=13)
+// "Echte werkregel inhoud" check: B..L (L=12)
 const LINE_FIRST_COL = 2;    // B
-const LINE_LAST_COL = 13;   // M
+const LINE_LAST_COL = 12;   // L
 
 // Header invulcellen
 const CELL_OPDR = "E1";
