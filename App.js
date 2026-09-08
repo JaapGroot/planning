@@ -4,24 +4,50 @@ const CONFIG = {
   TEAM_FILE_PREFIX: 'Planning - ',
 
   DATA_START_ROW: 7,
-  MASTER_TOTAL_COLS: 65,
+  COLUMN_HEADER_ROW: 6,
+  LOCK_TIMEOUT_MS: 30000,
 
   // Masterkolommen
-  WORKORDER_COL: 1,     // A
-  OPDRACHT_COL: 2,      // B (headerregel: Ja/Nee)
-  TEAM_COL: 7,         // L
+  WORKORDER_COL: 1, // A
+
+  // 2027: de oude losse opdrachtkolom is vervallen. De teamkolom is nu een
+  // combikolom: op de headerregel staat Ja/Nee, op detailregels staan teams.
+  // We zoeken deze kolom primair op de headertekst zodat toekomstige
+  // kolomverschuivingen niet opnieuw overal codewijzigingen vereisen.
+  TEAM_OR_OPDRACHT_HEADER_ALIASES: [
+    'team',
+    'team / opdracht',
+    'team/opdracht',
+    'opdracht / team',
+    'opdracht/team',
+  ],
+  TEAM_OR_OPDRACHT_FALLBACK_COL: 6, // F in de 2027-indeling
+
+  // Verwachte vaste A..G-indeling voor functies die semantiek per kolom gebruiken.
+  EXPECTED_2027_HEADERS: [
+    'werknummer',
+    'werksoort',
+    'frequentie',
+    'aantal',
+    'eenheid',
+    'team',
+    'werkzaamheden',
+  ],
+
+  // Drive-link import. Via DocumentProperties kan dit zonder codewijziging
+  // overschreven worden met sleutel DRIVE_LINKS_FOLDER_ID.
+  DRIVE_LINKS_FOLDER_ID: '1LW6UwuoaBKafbS7CM9P7Z6DQkvgZAw8J',
 
   // Teamsheet output
   TEAM_OUTPUT_START_ROW: 7,
   TEAM_OUTPUT_START_COL: 1,
-  TEAM_OUTPUT_MASTER_COLS: Array.from({ length: 65 }, (_, i) => i + 1),
 
   // Visuele setup teamsheet
   COPY_BACKGROUNDS: true,
   HEADER_FONT_COLOR: '#ffffff',
   HEADER_FONT_WEIGHT: 'bold',
 
-  // Teamwaarden die geen echt team zijn
+  // Waarden in de combikolom die geen echte teamnaam zijn.
   INVALID_TEAM_VALUES: ['team', 'ja', 'nee', 'opdracht'],
 
   // Template. Leeg laten = leeg spreadsheet maken.
@@ -30,11 +56,7 @@ const CONFIG = {
 
   TEAM_DEBUG: 'Danny Waltmann',
 
-  DATA_START_ROW: 7,
-  BLOCK_SORT_COL: 6,      // F
-  BLOCK_SORT_COL_2: 8,    // H
-  DETAIL_SORT_COL: 3,     // C
-  TEMP_SHEET_NAME: "_tmp_sort_blocks_",
+  TEMP_SHEET_NAME: '_tmp_sort_blocks_',
 
   DETAIL_ORDER: [
     'voorbereiding',
@@ -83,13 +105,13 @@ function onOpen() {
     .addItem('Debug teams', 'debugListTeams')
     .addToUi();
 
-    SpreadsheetApp.getUi()
-    .createMenu("Print")
-    .addItem("Print 1 werknummer (A3)", "uiPrintSingle")
-    .addItem("Batch: print alle locaties (PDF per locatie)", "uiPrintBatch")
-    .addItem("Batch hervatten", "uiResumeBatch")
-    .addItem("Sorteer planning (plaats)", "sortPlanningByLocation")
-    .addItem("Sorteer op werknummer", "sortPlanningByWorkNumber")
+  SpreadsheetApp.getUi()
+    .createMenu('Print')
+    .addItem('Print 1 werknummer (A3)', 'uiPrintSingle')
+    .addItem('Batch: print alle locaties (PDF per locatie)', 'uiPrintBatch')
+    .addItem('Batch hervatten', 'uiResumeBatch')
+    .addItem('Sorteer planning (plaats)', 'sortPlanningByLocation')
+    .addItem('Sorteer op werknummer', 'sortPlanningByWorkNumber')
     .addToUi();
 }
 
@@ -113,42 +135,49 @@ function promptAndSyncSingleTeam() {
  * =========================
  */
 function syncAllTeams() {
-  const ss = SpreadsheetApp.getActiveSpreadsheet();
-  const planningSheet = getPlanningSheetOrThrow_(ss);
+  return withPlanningDocumentLock_('teamsynchronisatie', () => {
+    const ss = SpreadsheetApp.getActiveSpreadsheet();
+    const planningSheet = getPlanningSheetOrThrow_(ss);
+    assertPlanningLayout2027_(planningSheet);
 
-  const snapshot = timeStep_('01 readPlanningSnapshot_', () => readPlanningSnapshot_(planningSheet));
-  const blocks = timeStep_('02 buildWorkOrderBlocks_', () => buildWorkOrderBlocks_(snapshot));
-  const teamIndex = timeStep_('03 indexBlocksByTeam_', () => indexBlocksByTeam_(blocks));
-  const cache = timeStep_('04 buildTeamFileCache_', () => buildTeamFileCache_(ss));
+    const snapshot = timeStep_('01 readPlanningSnapshot_', () => readPlanningSnapshot_(planningSheet));
+    const blocks = timeStep_('02 buildWorkOrderBlocks_', () => buildWorkOrderBlocks_(snapshot));
+    const teamIndex = timeStep_('03 indexBlocksByTeam_', () => indexBlocksByTeam_(blocks));
+    const cache = timeStep_('04 buildTeamFileCache_', () => buildTeamFileCache_(ss));
 
-  const teamNames = Object.keys(teamIndex).sort(localeCompareNl_);
-  Logger.log('Teams gevonden: %s', JSON.stringify(teamNames));
+    const teamNames = Object.keys(teamIndex).sort(localeCompareNl_);
+    Logger.log('Teams gevonden: %s', JSON.stringify(teamNames));
 
-  teamNames.forEach((teamName, idx) => {
-    timeStep_(`05 sync team ${idx + 1}/${teamNames.length}: ${teamName}`, () => {
-      syncTeamFromIndex_(ss, teamName, teamIndex[teamName], cache);
+    teamNames.forEach((teamName, idx) => {
+      timeStep_(`05 sync team ${idx + 1}/${teamNames.length}: ${teamName}`, () => {
+        syncTeamFromIndex_(ss, teamName, teamIndex[teamName], cache);
+      });
     });
   });
 }
 
 function syncSingleTeam(teamName) {
-  const ss = SpreadsheetApp.getActiveSpreadsheet();
-  const planningSheet = getPlanningSheetOrThrow_(ss);
-  const cleanTeamName = normalizeTeamNameKeepCase_(teamName);
-  if (!cleanTeamName) throw new Error('Ongeldige teamnaam.');
+  return withPlanningDocumentLock_('teamsynchronisatie', () => {
+    const ss = SpreadsheetApp.getActiveSpreadsheet();
+    const planningSheet = getPlanningSheetOrThrow_(ss);
+    assertPlanningLayout2027_(planningSheet);
 
-  const snapshot = timeStep_('01 readPlanningSnapshot_', () => readPlanningSnapshot_(planningSheet));
-  const blocks = timeStep_('02 buildWorkOrderBlocks_', () => buildWorkOrderBlocks_(snapshot));
-  const teamIndex = timeStep_('03 indexBlocksByTeam_', () => indexBlocksByTeam_(blocks));
-  const cache = timeStep_('04 buildTeamFileCache_', () => buildTeamFileCache_(ss));
+    const cleanTeamName = normalizeTeamNameKeepCase_(teamName);
+    if (!cleanTeamName) throw new Error('Ongeldige teamnaam.');
 
-  const matchedTeamName = findCanonicalTeamName_(cleanTeamName, Object.keys(teamIndex));
-  if (!matchedTeamName) {
-    throw new Error(`Team niet gevonden in planning: ${cleanTeamName}`);
-  }
+    const snapshot = timeStep_('01 readPlanningSnapshot_', () => readPlanningSnapshot_(planningSheet));
+    const blocks = timeStep_('02 buildWorkOrderBlocks_', () => buildWorkOrderBlocks_(snapshot));
+    const teamIndex = timeStep_('03 indexBlocksByTeam_', () => indexBlocksByTeam_(blocks));
+    const cache = timeStep_('04 buildTeamFileCache_', () => buildTeamFileCache_(ss));
 
-  timeStep_(`05 sync team ${matchedTeamName}`, () => {
-    syncTeamFromIndex_(ss, matchedTeamName, teamIndex[matchedTeamName], cache);
+    const matchedTeamName = findCanonicalTeamName_(cleanTeamName, Object.keys(teamIndex));
+    if (!matchedTeamName) {
+      throw new Error(`Team niet gevonden in planning: ${cleanTeamName}`);
+    }
+
+    timeStep_(`05 sync team ${matchedTeamName}`, () => {
+      syncTeamFromIndex_(ss, matchedTeamName, teamIndex[matchedTeamName], cache);
+    });
   });
 }
 
@@ -162,13 +191,13 @@ function debugAllTeamsTiming() {
 }
 
 function debugSingleTeamTiming() {
-  const TEAM_NAME = TEAM_DEBUG;
-  syncSingleTeam(TEAM_NAME);
+  syncSingleTeam(CONFIG.TEAM_DEBUG);
 }
 
 function debugListTeams() {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
   const planningSheet = getPlanningSheetOrThrow_(ss);
+  assertPlanningLayout2027_(planningSheet);
   const snapshot = readPlanningSnapshot_(planningSheet);
   const blocks = buildWorkOrderBlocks_(snapshot);
   const index = indexBlocksByTeam_(blocks);
@@ -188,15 +217,17 @@ function getPlanningSheetOrThrow_(ss) {
 
 function readPlanningSnapshot_(planningSheet) {
   const lastRow = planningSheet.getLastRow();
-  const lastCol = Math.min(CONFIG.MASTER_TOTAL_COLS, planningSheet.getLastColumn());
+  const lastCol = planningSheet.getLastColumn();
+  const layout = resolvePlanningLayout_(planningSheet, lastCol);
 
-  if (lastRow < CONFIG.DATA_START_ROW) {
+  if (lastRow < CONFIG.DATA_START_ROW || lastCol < 1) {
     return {
       lastRow,
       lastCol,
       numRows: 0,
       values: [],
       backgrounds: [],
+      layout,
     };
   }
 
@@ -209,7 +240,106 @@ function readPlanningSnapshot_(planningSheet) {
     numRows,
     values: range.getValues(),
     backgrounds: CONFIG.COPY_BACKGROUNDS ? range.getBackgrounds() : [],
+    layout,
   };
+}
+
+function resolvePlanningLayout_(planningSheet, lastCol) {
+  let teamOrOpdrachtCol = 0;
+  const headerRow = Math.min(CONFIG.COLUMN_HEADER_ROW, planningSheet.getMaxRows());
+
+  if (headerRow > 0 && lastCol > 0) {
+    const headerValues = planningSheet
+      .getRange(headerRow, 1, 1, lastCol)
+      .getDisplayValues();
+
+    teamOrOpdrachtCol = findHeaderColumn_(
+      headerValues,
+      CONFIG.TEAM_OR_OPDRACHT_HEADER_ALIASES
+    );
+  }
+
+  if (!teamOrOpdrachtCol) {
+    teamOrOpdrachtCol = Math.min(CONFIG.TEAM_OR_OPDRACHT_FALLBACK_COL, Math.max(lastCol, 1));
+    Logger.log(
+      'Team/opdracht-kolom niet via header gevonden; fallback naar kolom %s.',
+      teamOrOpdrachtCol
+    );
+  }
+
+  return {
+    workOrderCol: CONFIG.WORKORDER_COL,
+    teamOrOpdrachtCol,
+  };
+}
+
+function assertPlanningLayout2027_(planningSheet) {
+  const expected = CONFIG.EXPECTED_2027_HEADERS;
+  const lastCol = planningSheet.getLastColumn();
+  if (lastCol < expected.length) {
+    throw new Error(
+      `Planning-layout ongeldig: minimaal ${expected.length} kolommen verwacht, maar ${lastCol} gevonden.`
+    );
+  }
+
+  const actual = planningSheet
+    .getRange(CONFIG.COLUMN_HEADER_ROW, 1, 1, expected.length)
+    .getDisplayValues()[0]
+    .map(normalizeHeaderText_);
+
+  const mismatches = [];
+  for (let i = 0; i < expected.length; i++) {
+    if (actual[i] !== expected[i]) {
+      mismatches.push(`${columnLetter_(i + 1)}: verwacht "${expected[i]}", gevonden "${actual[i] || '-'}"`);
+    }
+  }
+
+  if (mismatches.length) {
+    throw new Error(
+      'Planning-layout wijkt af van de 2027-indeling. ' + mismatches.join('; ')
+    );
+  }
+}
+
+function planningColumnByHeader_(headerName) {
+  const wanted = normalizeHeaderText_(headerName);
+  const index = CONFIG.EXPECTED_2027_HEADERS.indexOf(wanted);
+  if (index < 0) throw new Error(`Onbekende planningkolom: ${headerName}`);
+  return index + 1;
+}
+
+function columnLetter_(col) {
+  let n = col;
+  let result = '';
+  while (n > 0) {
+    n--;
+    result = String.fromCharCode(65 + (n % 26)) + result;
+    n = Math.floor(n / 26);
+  }
+  return result;
+}
+
+function findHeaderColumn_(headerValues, aliases) {
+  const wanted = new Set((aliases || []).map(normalizeHeaderText_));
+  if (!wanted.size) return 0;
+
+  for (let r = 0; r < headerValues.length; r++) {
+    for (let c = 0; c < headerValues[r].length; c++) {
+      if (wanted.has(normalizeHeaderText_(headerValues[r][c]))) {
+        return c + 1;
+      }
+    }
+  }
+
+  return 0;
+}
+
+function normalizeHeaderText_(value) {
+  return String(value == null ? '' : value)
+    .replace(/\u00a0/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .toLowerCase();
 }
 
 /**
@@ -220,6 +350,9 @@ function readPlanningSnapshot_(planningSheet) {
 function buildWorkOrderBlocks_(snapshot) {
   const values = snapshot.values || [];
   const backgrounds = snapshot.backgrounds || [];
+  const layout = snapshot.layout || {};
+  const workOrderCol = layout.workOrderCol || CONFIG.WORKORDER_COL;
+  const teamOrOpdrachtCol = layout.teamOrOpdrachtCol || CONFIG.TEAM_OR_OPDRACHT_FALLBACK_COL;
   const blocks = [];
 
   let currentBlock = null;
@@ -228,7 +361,7 @@ function buildWorkOrderBlocks_(snapshot) {
   for (let i = 0; i < values.length; i++) {
     const row = values[i];
     const bg = backgrounds[i] || null;
-    const workOrder = normalizeWorkOrder_(row[CONFIG.WORKORDER_COL - 1]);
+    const workOrder = normalizeWorkOrder_(row[workOrderCol - 1]);
     if (!workOrder) continue;
 
     const isNewHeader = workOrder !== currentWorkOrder;
@@ -244,6 +377,7 @@ function buildWorkOrderBlocks_(snapshot) {
       currentWorkOrder = workOrder;
       currentBlock = {
         workOrder,
+        teamOrOpdrachtCol,
         headerRow: row,
         headerBg: bg,
         detailRows: [],
@@ -271,19 +405,17 @@ function buildWorkOrderBlocks_(snapshot) {
 }
 
 function finalizeBlock_(block) {
-  block.isOpdracht = isHeaderOpdracht_(block.headerRow);
+  block.isOpdracht = isHeaderOpdracht_(block.headerRow, block.teamOrOpdrachtCol);
   block.teams = block.isOpdracht ? extractTeamsFromBlock_(block) : [];
 }
 
-function isHeaderOpdracht_(headerRow) {
-  const raw = String(headerRow[CONFIG.OPDRACHT_COL - 1] == null ? '' : headerRow[CONFIG.OPDRACHT_COL - 1])
-    .trim()
-    .toLowerCase();
-  return raw === 'ja';
+function isHeaderOpdracht_(headerRow, teamOrOpdrachtCol) {
+  const raw = headerRow[teamOrOpdrachtCol - 1];
+  return normalizeTeamName_(raw) === 'ja';
 }
 
 function extractTeamsFromBlock_(block) {
-  const idx = CONFIG.TEAM_COL - 1;
+  const idx = block.teamOrOpdrachtCol - 1;
   const teamSet = new Set();
 
   (block.detailRows || []).forEach(row => {
@@ -318,20 +450,23 @@ function buildTeamOutput_(teamName, teamBlocks) {
   const teamNorm = normalizeTeamName_(teamName);
 
   (teamBlocks || []).forEach(block => {
-    rows.push(mapMasterRowToTeamRow_(block.headerRow));
+    const headerOutputRow = mapMasterRowToTeamRow_(block.headerRow);
+    rows.push(headerOutputRow);
     headerRows.push(rows.length); // 1-based binnen output
+
     if (CONFIG.COPY_BACKGROUNDS) {
-      backgrounds.push(mapMasterBackgroundRowToTeamBackgroundRow_(block.headerBg));
+      backgrounds.push(mapMasterBackgroundRowToTeamBackgroundRow_(block.headerBg, headerOutputRow.length));
     }
 
     for (let i = 0; i < block.detailRows.length; i++) {
       const row = block.detailRows[i];
       const rowBg = block.detailBgs[i] || null;
-      if (!rowBelongsToTeam_(row, teamNorm)) continue;
+      if (!rowBelongsToTeam_(row, teamNorm, block.teamOrOpdrachtCol)) continue;
 
-      rows.push(mapMasterRowToTeamRow_(row));
+      const detailOutputRow = mapMasterRowToTeamRow_(row);
+      rows.push(detailOutputRow);
       if (CONFIG.COPY_BACKGROUNDS) {
-        backgrounds.push(mapMasterBackgroundRowToTeamBackgroundRow_(rowBg));
+        backgrounds.push(mapMasterBackgroundRowToTeamBackgroundRow_(rowBg, detailOutputRow.length));
       }
     }
   });
@@ -339,19 +474,22 @@ function buildTeamOutput_(teamName, teamBlocks) {
   return { rows, backgrounds, headerRows };
 }
 
-function rowBelongsToTeam_(row, normalizedTeamName) {
-  const teams = splitTeamCell_(row[CONFIG.TEAM_COL - 1]).map(normalizeTeamName_);
+function rowBelongsToTeam_(row, normalizedTeamName, teamOrOpdrachtCol) {
+  const teams = splitTeamCell_(row[teamOrOpdrachtCol - 1]).map(normalizeTeamName_);
   return teams.indexOf(normalizedTeamName) >= 0;
 }
 
 function mapMasterRowToTeamRow_(masterRow) {
-  return CONFIG.TEAM_OUTPUT_MASTER_COLS.map(col1 => masterRow[col1 - 1]);
+  return (masterRow || []).slice();
 }
 
-function mapMasterBackgroundRowToTeamBackgroundRow_(bgRow) {
+function mapMasterBackgroundRowToTeamBackgroundRow_(bgRow, width) {
   if (!CONFIG.COPY_BACKGROUNDS) return [];
-  if (!bgRow) return CONFIG.TEAM_OUTPUT_MASTER_COLS.map(() => '#ffffff');
-  return CONFIG.TEAM_OUTPUT_MASTER_COLS.map(col1 => bgRow[col1 - 1] || '#ffffff');
+  if (!bgRow) return new Array(width).fill('#ffffff');
+
+  const mapped = bgRow.slice(0, width);
+  while (mapped.length < width) mapped.push('#ffffff');
+  return mapped;
 }
 
 /**
@@ -466,6 +604,8 @@ function createTeamSheet_(sheet, teamName, teamBlocks) {
 function updateTeamSheetAppendMissing_(sheet, teamName, teamBlocks) {
   const existingWorkOrders = timeStep_(`readExistingWorkOrders_ ${teamName}`, () => readExistingWorkOrders_(sheet));
 
+  // Bewust append-only: bestaande werknummerblokken blijven als historie staan.
+  // Alleen werknummerblokken die nog niet in dit teamblad voorkomen worden toegevoegd.
   const missingBlocks = (teamBlocks || []).filter(block => !existingWorkOrders.has(block.workOrder));
   Logger.log('%s -> ontbrekende blokken: %s', teamName, missingBlocks.length);
 
@@ -500,9 +640,9 @@ function readExistingWorkOrders_(sheet) {
  */
 function clearTeamOutputArea_(sheet) {
   const maxRows = sheet.getMaxRows();
-  const maxCols = Math.max(sheet.getMaxColumns(), CONFIG.TEAM_OUTPUT_MASTER_COLS.length);
+  const maxCols = sheet.getMaxColumns();
   const numRows = Math.max(0, maxRows - CONFIG.TEAM_OUTPUT_START_ROW + 1);
-  if (numRows <= 0) return;
+  if (numRows <= 0 || maxCols <= 0) return;
 
   sheet
     .getRange(CONFIG.TEAM_OUTPUT_START_ROW, CONFIG.TEAM_OUTPUT_START_COL, numRows, maxCols)
@@ -603,6 +743,23 @@ function ensureSheetHasEnoughSize_(sheet, requiredRows, requiredCols) {
  * Helpers
  * =========================
  */
+function withPlanningDocumentLock_(label, fn, timeoutMs) {
+  const lock = LockService.getDocumentLock();
+  const waitMs = timeoutMs == null ? CONFIG.LOCK_TIMEOUT_MS : timeoutMs;
+
+  if (!lock.tryLock(waitMs)) {
+    throw new Error(
+      `${label || 'Deze actie'} kan niet starten omdat een andere planning-actie nog bezig is. Probeer het zo opnieuw.`
+    );
+  }
+
+  try {
+    return fn();
+  } finally {
+    lock.releaseLock();
+  }
+}
+
 function timeStep_(label, fn) {
   const start = Date.now();
   const result = fn();
