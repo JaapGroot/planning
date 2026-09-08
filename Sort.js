@@ -74,6 +74,10 @@ function sortWorkBlocksWithoutGroups_(options) {
     return;
   }
 
+  // Bestaande groepen horen bij de huidige rijposities. Verwijder alleen de
+  // groepering; celinhoud en opmaak blijven onaangeroerd.
+  clearPlanningSortGroups_(sh, startRow, numRows);
+
   for (const block of blocks) {
     if (block.detailRows.length < 2) continue;
 
@@ -154,8 +158,43 @@ function sortWorkBlocksWithoutGroups_(options) {
   temp.getRange(1, 1, totalOutputRows, lastCol)
     .copyTo(sh.getRange(startRow, 1, totalOutputRows, lastCol), { contentsOnly: false });
 
+  // Kopregel blijft buiten de groep; alleen de detailregels eronder worden
+  // gegroepeerd en direct uitgeklapt.
+  applyPlanningSortGroups_(sh, blocks, startRow);
+
   temp.clear();
   temp.clearFormats();
+}
+
+function clearPlanningSortGroups_(sheet, startRow, numRows) {
+  const endRow = startRow + Math.max(0, numRows) - 1;
+
+  for (let row = startRow; row <= endRow; row++) {
+    let depth = sheet.getRowGroupDepth(row);
+
+    while (depth > 0) {
+      sheet.getRange(row, 1, 1, 1).shiftRowGroupDepth(-1);
+      depth = sheet.getRowGroupDepth(row);
+    }
+  }
+}
+
+function applyPlanningSortGroups_(sheet, blocks, startRow) {
+  let cursor = startRow;
+
+  for (const block of blocks) {
+    const detailCount = block.detailRows.length;
+
+    if (detailCount > 0) {
+      const detailStart = cursor + 1;
+      sheet.getRange(detailStart, 1, detailCount, 1).shiftRowGroupDepth(1);
+
+      const group = sheet.getRowGroup(detailStart, 1);
+      if (group) group.expand();
+    }
+
+    cursor += 1 + detailCount;
+  }
 }
 
 function safeCell_(rowValues, colIndex1Based) {
