@@ -1,16 +1,16 @@
 function sortPlanningByLocation() {
   sortWorkBlocksWithoutGroups_({
-    blockSortCol: 6,   // F
-    blockSortCol2: 8,  // H
-    detailSortCol: 3   // C
+    blockSortCol: 5,   // E
+    blockSortCol2: 7,  // G
+    detailSortCol: 2   // B
   });
 }
 
 function sortPlanningByWorkNumber() {
   sortWorkBlocksWithoutGroups_({
     blockSortCol: 1,   // A = werknummer
-    blockSortCol2: 8, // H
-    detailSortCol: 3   // C
+    blockSortCol2: 7, // G
+    detailSortCol: 2   // B
   });
 }
 
