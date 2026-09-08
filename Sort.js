@@ -76,7 +76,7 @@ function sortWorkBlocksWithoutGroups_(options) {
       return;
     }
 
-    // Groepen horen bij de huidige rijposities. Haal ze daarom eerst volledig
+    // Groepen horen bij de huidige rijposities. Haal ze daarom eerst veilig
     // van het databereik af voordat we de blokken gaan verplaatsen.
     clearPlanningRowGroups_(sh, startRow, numRows);
 
@@ -150,13 +150,18 @@ function sortWorkBlocksWithoutGroups_(options) {
 function clearPlanningRowGroups_(sheet, startRow, numRows) {
   if (numRows <= 0) return;
 
-  const range = sheet.getRange(startRow, 1, numRows, 1);
+  const endRow = startRow + numRows - 1;
 
-  // Google Sheets ondersteunt maximaal 8 niveaus rijgroepering. Door het hele
-  // databereik acht keer één niveau terug te zetten zijn ook eventuele oude
-  // of geneste groepen volledig verwijderd zonder rij-voor-rij API-calls.
-  for (let depth = 0; depth < 8; depth++) {
-    range.shiftRowGroupDepth(-1);
+  // Gebruik bewust dezelfde veilige aanpak als de oude werkende groepscode:
+  // alleen een rij terugschuiven zolang die daadwerkelijk gegroepeerd is.
+  // Een bulk shift op een bereik met niet-gegroepeerde rijen kan foutlopen.
+  for (let row = startRow; row <= endRow; row++) {
+    let depth = sheet.getRowGroupDepth(row);
+
+    while (depth > 0) {
+      sheet.getRange(row, 1, 1, 1).shiftRowGroupDepth(-1);
+      depth = sheet.getRowGroupDepth(row);
+    }
   }
 }
 
